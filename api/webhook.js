@@ -3,9 +3,25 @@ export default async function handler(req, res) {
   console.log('Method:', req.method);
   console.log('Headers:', req.headers);
   
+  // Handle GET requests (browser access)
+  if (req.method === 'GET') {
+    return res.status(200).json({ ok: true, message: 'LINE webhook endpoint is active' });
+  }
+  
+  // Handle OPTIONS (preflight)
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
+  
   try {
     const body = req.body ?? await readJson(req);
     console.log('Body:', JSON.stringify(body));
+    
+    // LINE webhook verification (empty events array)
+    if (body?.events && body.events.length === 0) {
+      console.log('LINE webhook verification detected');
+      return res.status(200).json({ ok: true });
+    }
     
     const ev = body?.events?.[0];
     if (!ev?.replyToken) {
