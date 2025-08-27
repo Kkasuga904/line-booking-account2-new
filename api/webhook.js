@@ -29,8 +29,13 @@ export default async function handler(req, res) {
     
     const token = process.env.LINE_CHANNEL_ACCESS_TOKEN;
     if (!token) {
-      console.error('LINE_CHANNEL_ACCESS_TOKEN not set');
-      return res.status(200).json({ ok: true, error: 'token_not_configured' });
+      console.error('LINE_CHANNEL_ACCESS_TOKEN not set - returning without LINE reply');
+      // トークンがなくても基本的な返信メッセージは生成する
+      return res.status(200).json({ 
+        ok: true, 
+        warning: 'token_not_configured',
+        message: 'LINE_CHANNEL_ACCESS_TOKENを設定してください'
+      });
     }
     
     // LIFF IDの取得（環境変数またはデフォルト）
@@ -94,8 +99,14 @@ export default async function handler(req, res) {
     // Always return 200 for LINE webhook
     res.status(200).json({ ok: true });
   } catch (e) {
-    console.error('A2 webhook error:', e);
-    res.status(200).json({ ok: true, error: 'internal' });
+    console.error('A2 webhook error:', e.message);
+    console.error('Stack:', e.stack);
+    // エラーでも200を返す（LINE要件）
+    res.status(200).json({ 
+      ok: true, 
+      error: 'internal',
+      message: e.message
+    });
   }
 }
 function readJson(req){return new Promise((resolve,reject)=>{let d='';req.on('data',c=>d+=c);req.on('end',()=>{try{resolve(JSON.parse(d||'{}'))}catch(e){reject(e)}});req.on('error',reject)})}
