@@ -1,10 +1,25 @@
 export default async function handler(req, res) {
+  console.log('=== Account 2 Webhook ===');
+  console.log('Method:', req.method);
+  console.log('Headers:', req.headers);
+  
   try {
     const body = req.body ?? await readJson(req);
+    console.log('Body:', JSON.stringify(body));
+    
     const ev = body?.events?.[0];
-    if (!ev?.replyToken) return res.status(200).json({ ok: true, skip: true });
+    if (!ev?.replyToken) {
+      console.log('No replyToken, returning 200 OK');
+      return res.status(200).json({ ok: true, skip: true });
+    }
 
     const token = process.env.LINE_CHANNEL_ACCESS_TOKEN;
+    if (!token) {
+      console.error('LINE_CHANNEL_ACCESS_TOKEN not set');
+      // Still return 200 to pass LINE webhook verification
+      return res.status(200).json({ ok: true, error: 'token_not_configured' });
+    }
+    
     const r = await fetch('https://api.line.me/v2/bot/message/reply', {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -16,11 +31,13 @@ export default async function handler(req, res) {
     
     const txt = await r.text();
     console.log('A2 LINE reply', r.status, txt);
-    if (!r.ok) return res.status(500).json({ ok: false, status: r.status, txt });
-    res.status(200).json({ ok: true });
+    
+    // Always return 200 for LINE webhook
+    res.status(200).json({ ok: true, lineStatus: r.status });
   } catch (e) {
     console.error('A2 webhook error', e);
-    res.status(200).json({ ok: true });
+    // Always return 200 for LINE webhook
+    res.status(200).json({ ok: true, error: 'internal' });
   }
 }
 function readJson(req){return new Promise((resolve,reject)=>{let d='';req.on('data',c=>d+=c);req.on('end',()=>{try{resolve(JSON.parse(d||'{}'))}catch(e){reject(e)}});req.on('error',reject)})}
