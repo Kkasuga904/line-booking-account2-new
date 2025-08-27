@@ -1,5 +1,9 @@
 {
   "rewrites": [
-    { "source": "/webhook", "destination": "/api/webhook" }
+    { "source": "/webhook", "destination": "/api/webhook" },
+    { "source": "/admin", "destination": "/admin.html" },
+    { "source": "/admin-calendar", "destination": "/admin-calendar.html" },
+    { "source": "/liff", "destination": "/liff-calendar.html" },
+    { "source": "/liff-calendar", "destination": "/liff-calendar.html" }
   ]
 }
