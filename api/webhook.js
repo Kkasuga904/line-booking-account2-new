@@ -1,12 +1,18 @@
 /**
- * Account 2 LINE Webhook Handler
+ * Account 2 LINE Webhook Handler with Capacity Management
  * 
  * このエンドポイントはLINE Messaging APIからのWebhookを処理します。
+ * 店長による制限コマンドの解析と、予約制限機能を含みます。
  * 重要: LINEの仕様により、必ず200ステータスを返す必要があります。
  * 
  * @param {Request} req - HTTPリクエスト
  * @param {Response} res - HTTPレスポンス
  */
+
+// Capacity command parser import
+// Note: 現在はファイルパス問題により直接import不可、将来的に対応
+// import { CapacityCommandParser } from '../../line-booking-system/utils/capacity-command-parser.js';
+
 export default async function handler(req, res) {
   // デバッグ用: リクエストの基本情報をログ出力
   console.log('=== Account 2 Webhook ===');
@@ -73,36 +79,216 @@ export default async function handler(req, res) {
     // イベントタイプ別の処理
     // 友だち追加イベント（ユーザーがボットを友だち追加した時）
     if (event.type === 'follow' && event.replyToken) {
-      replyMessages = [{
-        type: 'text',
-        text: `友だち追加ありがとうございます！\n\n🏪 Restaurant Account2へようこそ！\n\n【ご予約はこちら】\n📱 LINE内で予約（おすすめ）\n${liffUrl}\n\n🌐 ブラウザで予約\nhttps://line-booking-account2-new.vercel.app/liff-calendar\n\n予約の確認・変更も承っております。`
-      }];
+      replyMessages = [
+        {
+          type: 'text',
+          text: `ご登録ありがとうございます！🎉\n\n【Restaurant Account2】\nカジュアルダイニング\n\n営業時間:\n月〜金 11:00-22:00\n土日祝 10:00-23:00\n\nご予約は下記ボタンから簡単にできます👇`
+        },
+        {
+          type: 'template',
+          altText: '予約メニュー',
+          template: {
+            type: 'buttons',
+            text: '何をご希望ですか？',
+            actions: [
+              {
+                type: 'uri',
+                label: '📅 新規予約',
+                uri: liffUrl
+              },
+              {
+                type: 'message',
+                label: '📋 予約確認',
+                text: '予約確認'
+              },
+              {
+                type: 'message',
+                label: '📞 お問い合わせ',
+                text: 'お問い合わせ'
+              }
+            ]
+          }
+        }
+      ];
     }
     // メッセージイベント（ユーザーがテキストメッセージを送信した時）
     else if (event.type === 'message' && event.message?.text && event.replyToken) {
-      // メッセージを小文字に変換して判定を簡単にする
-      const userMessage = event.message.text.toLowerCase();
+      const userMessage = event.message.text;
+      const userMessageLower = userMessage.toLowerCase();
       
+      // 制限コマンドの処理（店長専用機能）
+      if (userMessage.startsWith('/limit') || userMessage.startsWith('/stop') || userMessage === '/limits') {
+        try {
+          // TODO: 実際の実装では適切な認証を行う
+          // 現在は簡易版として直接処理
+          
+          const response = await processCapacityCommand(userMessage, event.source?.userId, 'restaurant-002');
+          replyMessages = [{
+            type: 'text',
+            text: response.success ? response.message : `エラー: ${response.error}`
+          }];
+        } catch (error) {
+          console.error('Capacity command error:', error);
+          replyMessages = [{
+            type: 'text',
+            text: '制限コマンドの処理中にエラーが発生しました。'
+          }];
+        }
+      }
       // キーワードに応じた返信を生成
-      if (userMessage.includes('予約')) {
+      else if (userMessageLower.includes('予約')) {
+        replyMessages = [
+          {
+            type: 'template',
+            altText: '予約オプション',
+            template: {
+              type: 'confirm',
+              text: '新規予約をご希望ですか？',
+              actions: [
+                {
+                  type: 'uri',
+                  label: 'はい（予約画面へ）',
+                  uri: liffUrl
+                },
+                {
+                  type: 'message',
+                  label: '予約を確認する',
+                  text: '予約確認'
+                }
+              ]
+            }
+          }
+        ];
+      } else if (userMessageLower.includes('確認') || userMessageLower.includes('変更') || userMessageLower.includes('キャンセル')) {
+        // TODO: 実際の予約確認機能実装後は予約情報を返す
+        replyMessages = [
+          {
+            type: 'text',
+            text: '予約確認システムをご利用いただきありがとうございます。'
+          },
+          {
+            type: 'template',
+            altText: '予約管理',
+            template: {
+              type: 'buttons',
+              text: '予約の確認・変更はこちらから',
+              actions: [
+                {
+                  type: 'uri',
+                  label: '📊 予約管理画面',
+                  uri: 'https://line-booking-account2-new.vercel.app/admin-calendar'
+                },
+                {
+                  type: 'message',
+                  label: '🔍 予約番号で検索',
+                  text: '予約番号：'
+                },
+                {
+                  type: 'message',
+                  label: '📞 電話で確認',
+                  text: 'お問い合わせ'
+                }
+              ]
+            }
+          }
+        ];
+      } else if (userMessageLower.includes('営業') || userMessageLower.includes('時間')) {
+        replyMessages = [
+          {
+            type: 'text',
+            text: `📍 Restaurant Account2\n\n【営業時間】\n月〜金: 11:00〜22:00 (L.O. 21:30)\n土日祝: 10:00〜23:00 (L.O. 22:30)\n\n【定休日】\n年中無休（年末年始を除く）\n\n【アクセス】\n〒100-0001\n東京都千代田区サンプル1-2-3\n\n☎️ 03-0000-0000`
+          },
+          {
+            type: 'template',
+            altText: 'クイックアクション',
+            template: {
+              type: 'buttons',
+              text: '本日のご予約はいかがですか？',
+              actions: [
+                {
+                  type: 'uri',
+                  label: '📅 今すぐ予約',
+                  uri: liffUrl
+                },
+                {
+                  type: 'message',
+                  label: '🍽 本日のメニュー',
+                  text: 'メニュー'
+                }
+              ]
+            }
+          }
+        ];
+      } else if (userMessageLower.includes('メニュー') || userMessageLower.includes('料理')) {
         replyMessages = [{
           type: 'text',
-          text: `ご予約はこちらから：\n\n📱 LINE内で予約（おすすめ）\n${liffUrl}\n\n🌐 ブラウザで予約\nhttps://line-booking-account2-new.vercel.app/liff-calendar\n\n📊 管理画面\nhttps://line-booking-account2-new.vercel.app/admin-calendar`
+          text: `🍽 本日のおすすめ\n\n【ランチ】11:00-15:00\n・日替わりパスタ ¥1,200\n・本日の魚料理 ¥1,500\n・黒毛和牛ハンバーグ ¥1,800\n\n【ディナー】17:00-22:00\n・シェフおまかせコース ¥5,000〜\n・アラカルト各種\n\n※価格は税込です`
         }];
-      } else if (userMessage.includes('確認') || userMessage.includes('変更') || userMessage.includes('キャンセル')) {
+      } else if (userMessageLower.includes('問い合わせ') || userMessageLower.includes('電話')) {
         replyMessages = [{
           type: 'text',
-          text: `予約の確認・変更・キャンセル：\n\n📊 管理画面\nhttps://line-booking-account2-new.vercel.app/admin-calendar\n\n📋 予約一覧\nhttps://line-booking-account2-new.vercel.app/`
+          text: `📞 お問い合わせ\n\nお電話: 03-0000-0000\n受付時間: 10:00-21:00\n\nLINEでもご質問を承っております。\nお気軽にメッセージをお送りください！`
         }];
-      } else if (userMessage.includes('営業') || userMessage.includes('時間')) {
+      } else if (userMessageLower.includes('予約番号')) {
         replyMessages = [{
           type: 'text',
-          text: `【営業時間】\n月〜金: 11:00〜22:00\n土日祝: 10:00〜23:00\n\n【定休日】\n年中無休（年末年始を除く）\n\nご予約お待ちしております！`
+          text: `予約番号をお送りください。\n例: R123456789\n\n予約番号は予約完了時にお送りしたメッセージに記載されています。`
+        }];
+      } else if (userMessage.startsWith('R') && userMessage.length > 8) {
+        // 予約番号らしき文字列の処理
+        replyMessages = [{
+          type: 'text',
+          text: `予約番号 ${userMessage} を確認中...\n\n申し訳ございません。現在システムメンテナンス中です。\nお手数ですが、お電話（03-0000-0000）でご確認ください。`
         }];
       } else {
+        // クイックリプライで選択肢を提示
         replyMessages = [{
           type: 'text',
-          text: `メッセージありがとうございます！\n\n【ご予約】\n📱 LINE内で予約\n${liffUrl}\n\n【予約管理】\n📊 管理画面\nhttps://line-booking-account2-new.vercel.app/admin-calendar\n\n何かご不明な点がございましたら、「予約」「確認」「営業時間」などとお送りください。`
+          text: `こんにちは！ご用件をお選びください👇`,
+          quickReply: {
+            items: [
+              {
+                type: 'action',
+                action: {
+                  type: 'message',
+                  label: '🍴 新規予約',
+                  text: '予約したい'
+                }
+              },
+              {
+                type: 'action',
+                action: {
+                  type: 'message',
+                  label: '📋 予約確認',
+                  text: '予約確認'
+                }
+              },
+              {
+                type: 'action',
+                action: {
+                  type: 'message',
+                  label: '⏰ 営業時間',
+                  text: '営業時間'
+                }
+              },
+              {
+                type: 'action',
+                action: {
+                  type: 'message',
+                  label: '🍽 メニュー',
+                  text: 'メニュー'
+                }
+              },
+              {
+                type: 'action',
+                action: {
+                  type: 'message',
+                  label: '📞 お問い合わせ',
+                  text: 'お問い合わせ'
+                }
+              }
+            ]
+          }
         }];
       }
     }
@@ -145,6 +331,42 @@ export default async function handler(req, res) {
       message: e.message  // デバッグ用にエラーメッセージを含める
     });
   }
+}
+
+/**
+ * 制限コマンドを処理する関数
+ * 本来は separate utility から import すべきだが、
+ * パス問題により一時的にここに簡易実装
+ * 
+ * @param {string} messageText - コマンドテキスト
+ * @param {string} userId - ユーザーID
+ * @param {string} storeId - 店舗ID
+ * @returns {Promise<Object>} 処理結果
+ */
+async function processCapacityCommand(messageText, userId, storeId) {
+  // 簡易実装: コマンドを認識して適切なレスポンスを返す
+  const text = messageText.trim();
+  
+  if (text === '/limits') {
+    // 制限ルール一覧の取得（仮実装）
+    return {
+      success: true,
+      message: '📋 現在の制限ルール:\n\n現在、制限ルールは設定されていません。\n\n利用可能なコマンド:\n/limit today 20 ... 今日の予約を20件まで制限\n/limit sat,sun lunch 5/h ... 週末ランチを1時間5件まで\n/stop today 18:00- ... 今日18時以降予約停止'
+    };
+  }
+  
+  if (text.startsWith('/limit ') || text.startsWith('/stop ')) {
+    // 制限設定コマンドの解析（仮実装）
+    return {
+      success: true,
+      message: `制限ルールを設定しました:\n${text}\n\n（注: 現在はテスト実装です。本格実装は準備中）`
+    };
+  }
+  
+  return {
+    success: false,
+    error: '未対応のコマンドです'
+  };
 }
 
 /**
